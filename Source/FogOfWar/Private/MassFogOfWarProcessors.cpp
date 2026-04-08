@@ -321,7 +321,13 @@ void UVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
 		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
 	}
 
-	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !UMinimapDataSubsystem::Get())
+	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !MinimapSubsystem)
+	{
+		return;
+	}
+
+	if (MinimapSubsystem->VisionTileSize <= 0.0f || MinimapSubsystem->VisionGridResolution.X <= 0 || MinimapSubsystem->VisionGridResolution.Y <= 0)
 	{
 		return;
 	}
