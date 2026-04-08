@@ -336,7 +336,7 @@ void UVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
 	{
 		FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
 
-		const auto& Entities = Context.GetEntities();
+		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
 		for (const FMassEntityHandle& Entity : Entities)
 		{
 			Context.Defer().RemoveTag<FMassLocationChangedTag>(Entity);
