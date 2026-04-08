@@ -8,6 +8,12 @@
 #include "MassFogOfWarFragments.h"
 #include "DrawDebugHelpers.h"
 
+namespace
+{
+	constexpr int32 DefaultMinimapResolution = 256;
+	constexpr float DefaultVisionTileSize = 100.0f;
+}
+
 // Define the static singleton instance pointer.
 UMinimapDataSubsystem* UMinimapDataSubsystem::SingletonInstance = nullptr;
 
@@ -43,8 +49,8 @@ void UMinimapDataSubsystem::Deinitialize()
 void UMinimapDataSubsystem::SetMinimapResolution(const FIntPoint& NewResolution)
 {
 	MinimapGridResolution = NewResolution;
-	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = 256;
-	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = 256;
+	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = DefaultMinimapResolution;
+	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = DefaultMinimapResolution;
 	MinimapTiles.SetNum(MinimapGridResolution.X * MinimapGridResolution.Y);
 
 	// 如果主网格数据已存在，现在计算小地图瓦片尺寸
@@ -60,7 +66,7 @@ void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrig
 	GridSize = InGridSize;
 	// Fallback to the plugin's historical default tile size (100 cm) to keep behavior
 	// predictable when callers pass an invalid value, while preserving reasonable density.
-	VisionTileSize = InVisionTileSize > 0.0f ? InVisionTileSize : 100.0f;
+	VisionTileSize = InVisionTileSize > 0.0f ? InVisionTileSize : DefaultVisionTileSize;
 
 	VisionGridResolution = InVisionResolution;
 	if (VisionGridResolution.X <= 0)
@@ -85,8 +91,8 @@ void UMinimapDataSubsystem::InitMinimapGrid(const FVector2D& InGridOrigin, const
 	MinimapGridResolution = InResolution;
 	
 	// Ensure Resolution is valid to avoid division by zero
-	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = 256;
-	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = 256;
+	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = DefaultMinimapResolution;
+	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = DefaultMinimapResolution;
 
 	MinimapTiles.SetNum(MinimapGridResolution.X * MinimapGridResolution.Y);
 

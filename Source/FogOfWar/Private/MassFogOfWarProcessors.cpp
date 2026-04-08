@@ -279,7 +279,7 @@ void UInitialVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
 	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
 	{
-		const auto& Entities = Context.GetEntities();
+		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
 		for (const FMassEntityHandle& Entity : Entities)
 		{
 			Context.Defer().AddTag<FMassVisionInitializedTag>(Entity);
