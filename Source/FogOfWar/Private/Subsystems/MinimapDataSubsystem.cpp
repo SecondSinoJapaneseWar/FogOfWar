@@ -58,6 +58,8 @@ void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrig
 {
 	GridBottomLeftWorldLocation = InGridOrigin;
 	GridSize = InGridSize;
+	// Fallback to the plugin's historical default tile size (100 cm) to keep behavior
+	// predictable when callers pass an invalid value, while preserving reasonable density.
 	VisionTileSize = InVisionTileSize > 0.0f ? InVisionTileSize : 100.0f;
 
 	VisionGridResolution = InVisionResolution;
