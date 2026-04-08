@@ -214,7 +214,7 @@ Plugins/FogOfWar/Source/FogOfWar/
 
 如果出现“有后处理材质但迷雾不更新”，优先检查：
 
-1. 是否有 `AFogOfWar` 且已激活；
-2. 视野单位是否带 `UMassVisionTrait` 且 `SightRadius > 0`；
-3. `GridVolume` 是否覆盖实际战场区域；
+1. 是否有 `AFogOfWar` 且已激活。
+2. 视野单位是否带 `UMassVisionTrait` 且 `SightRadius > 0`。
+3. `GridVolume` 是否覆盖实际战场区域。
 4. 材质参数名是否与插件中使用的参数一致（`FOW_*`）。
