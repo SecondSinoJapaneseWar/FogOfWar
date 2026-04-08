@@ -77,11 +77,11 @@ void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrig
 	VisionGridResolution = InVisionResolution;
 	if (VisionGridResolution.X <= 0)
 	{
-		VisionGridResolution.X = SafeVisionTileSize > 0.0f ? FMath::Max(1, FMath::CeilToInt32(GridSize.X / SafeVisionTileSize)) : 1;
+		VisionGridResolution.X = FMath::Max(1, FMath::CeilToInt32(GridSize.X / SafeVisionTileSize));
 	}
 	if (VisionGridResolution.Y <= 0)
 	{
-		VisionGridResolution.Y = SafeVisionTileSize > 0.0f ? FMath::Max(1, FMath::CeilToInt32(GridSize.Y / SafeVisionTileSize)) : 1;
+		VisionGridResolution.Y = FMath::Max(1, FMath::CeilToInt32(GridSize.Y / SafeVisionTileSize));
 	}
 
 	if (MinimapGridResolution.X > 0 && MinimapGridResolution.Y > 0 && GridSize.X > 0 && GridSize.Y > 0)
