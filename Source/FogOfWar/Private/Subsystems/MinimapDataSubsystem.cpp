@@ -43,10 +43,34 @@ void UMinimapDataSubsystem::Deinitialize()
 void UMinimapDataSubsystem::SetMinimapResolution(const FIntPoint& NewResolution)
 {
 	MinimapGridResolution = NewResolution;
+	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = 256;
+	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = 256;
 	MinimapTiles.SetNum(MinimapGridResolution.X * MinimapGridResolution.Y);
 
 	// 如果主网格数据已存在，现在计算小地图瓦片尺寸
 	if (GridSize.X > 0 && GridSize.Y > 0)
+	{
+		MinimapTileSize = FVector2D(GridSize.X / MinimapGridResolution.X, GridSize.Y / MinimapGridResolution.Y);
+	}
+}
+
+void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrigin, const FVector2D& InGridSize, float InVisionTileSize, const FIntPoint& InVisionResolution)
+{
+	GridBottomLeftWorldLocation = InGridOrigin;
+	GridSize = InGridSize;
+	VisionTileSize = InVisionTileSize > 0.0f ? InVisionTileSize : 100.0f;
+
+	VisionGridResolution = InVisionResolution;
+	if (VisionGridResolution.X <= 0)
+	{
+		VisionGridResolution.X = FMath::Max(1, FMath::CeilToInt32(GridSize.X / VisionTileSize));
+	}
+	if (VisionGridResolution.Y <= 0)
+	{
+		VisionGridResolution.Y = FMath::Max(1, FMath::CeilToInt32(GridSize.Y / VisionTileSize));
+	}
+
+	if (MinimapGridResolution.X > 0 && MinimapGridResolution.Y > 0 && GridSize.X > 0 && GridSize.Y > 0)
 	{
 		MinimapTileSize = FVector2D(GridSize.X / MinimapGridResolution.X, GridSize.Y / MinimapGridResolution.Y);
 	}

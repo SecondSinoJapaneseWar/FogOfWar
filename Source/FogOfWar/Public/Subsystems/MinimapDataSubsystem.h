@@ -67,6 +67,13 @@ public:
 	void UpdateMinimapFromHashGrid(FVector CenterLocation, int32 BlockRadius = 8);
 
 	/**
+	 * 同步战争迷雾高精度网格参数。
+	 * 通常由 AFogOfWar 在初始化后调用，以保证静态坐标转换函数参数有效。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "FogOfWar|Vision")
+	void SyncVisionGridParameters(const FVector2D& InGridOrigin, const FVector2D& InGridSize, float InVisionTileSize, const FIntPoint& InVisionResolution);
+
+	/**
 	 * 手动初始化小地图网格参数 (通常由 AMinimapVolume 等 Actor 调用)。
 	 * @param InGridOrigin 世界坐标原点 (GridBottomLeft)
 	 * @param InGridSize 世界空间总尺寸

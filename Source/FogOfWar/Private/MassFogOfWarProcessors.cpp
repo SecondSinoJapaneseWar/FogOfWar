@@ -316,26 +316,26 @@ void UVisionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& En
 
 void UVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	//if (!FogOfWarActor.Get())
-	//{
-	//	FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
-	//}
-	//if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !UMinimapDataSubsystem::Get() || !UMinimapDataSubsystem::Get()->bIsInitialized)
-	//{
-	//	return;
-	//}
+	if (!FogOfWarActor.Get())
+	{
+		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
+	}
 
-	//EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
-	//{
-	//	FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
+	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !UMinimapDataSubsystem::Get())
+	{
+		return;
+	}
 
-	//	// Remove location changed tag from all entities in the chunk
-	//	const auto& Entities = Context.GetEntities();
-	//	for (const FMassEntityHandle& Entity : Entities)
-	//	{
-	//		Context.Defer().RemoveTag<FMassLocationChangedTag>(Entity);
-	//	}
-	//});
+	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
+	{
+		FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
+
+		const auto& Entities = Context.GetEntities();
+		for (const FMassEntityHandle& Entity : Entities)
+		{
+			Context.Defer().RemoveTag<FMassLocationChangedTag>(Entity);
+		}
+	});
 }
 
 //----------------------------------------------------------------------//
@@ -391,4 +391,3 @@ void UDebugStressTestProcessor::Execute(FMassEntityManager& EntityManager, FMass
 		}
 	});*/
 }
-
