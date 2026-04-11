@@ -279,7 +279,7 @@ void UInitialVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
 	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
 	{
-		const auto& Entities = Context.GetEntities();
+		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
 		for (const FMassEntityHandle& Entity : Entities)
 		{
 			Context.Defer().AddTag<FMassVisionInitializedTag>(Entity);
@@ -316,26 +316,32 @@ void UVisionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& En
 
 void UVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	//if (!FogOfWarActor.Get())
-	//{
-	//	FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
-	//}
-	//if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !UMinimapDataSubsystem::Get() || !UMinimapDataSubsystem::Get()->bIsInitialized)
-	//{
-	//	return;
-	//}
+	if (!FogOfWarActor.Get())
+	{
+		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
+	}
 
-	//EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
-	//{
-	//	FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
+	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !MinimapSubsystem)
+	{
+		return;
+	}
 
-	//	// Remove location changed tag from all entities in the chunk
-	//	const auto& Entities = Context.GetEntities();
-	//	for (const FMassEntityHandle& Entity : Entities)
-	//	{
-	//		Context.Defer().RemoveTag<FMassLocationChangedTag>(Entity);
-	//	}
-	//});
+	if (MinimapSubsystem->VisionTileSize <= 0.0f || MinimapSubsystem->VisionGridResolution.X <= 0 || MinimapSubsystem->VisionGridResolution.Y <= 0)
+	{
+		return;
+	}
+
+	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
+	{
+		FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
+
+		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
+		for (const FMassEntityHandle& Entity : Entities)
+		{
+			Context.Defer().RemoveTag<FMassLocationChangedTag>(Entity);
+		}
+	});
 }
 
 //----------------------------------------------------------------------//
@@ -391,4 +397,3 @@ void UDebugStressTestProcessor::Execute(FMassEntityManager& EntityManager, FMass
 		}
 	});*/
 }
-

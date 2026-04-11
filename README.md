@@ -188,3 +188,33 @@ Plugins/FogOfWar/Source/FogOfWar/
 *   ❌ **移除**: 不要再给 Actor 添加 `VisionComponent`。
 *   ✅ **配置**: 直接在 MassBattle 的 DataAsset 中配置 Vision 属性。
 *   ✅ **依赖**: 确保您的 `MassBattleFrame` 插件正确依赖了本插件。
+
+## 5. 当前版本使用方式（屏幕后处理 + 小地图）
+
+### 5.1 玩家主画面迷雾（后处理）
+本插件当前采用**对玩家看到的场景进行后处理**的方式输出迷雾效果。
+你需要在关卡里放置并配置 `AFogOfWar`：
+
+1. 放置 `AFogOfWar` Actor，并设置 `GridVolume`。
+2. 配置材质：`InterpolationMaterial`、`AfterInterpolationMaterial`、`SuperSamplingMaterial`、`PostProcessingMaterial`。
+3. 保持 `bAutoActivate=true`（或在运行时手动调用 `Activate`）。
+4. 在 Mass 实体原型上添加 `UMassVisionTrait`，给单位配置 `SightRadius`（大于 0）。
+
+> 分辨率控制：通过 `AFogOfWar::TileSize` 控制高精度迷雾网格密度。
+> `TileSize` 越小，精度越高、开销越大。
+
+### 5.2 小地图
+小地图走 `UMinimapDataSubsystem::UpdateMinimapFromHashGrid` 路径（HashGrid 降采样），`UMinimapWidget` 会在 Tick 中触发更新。
+
+1. 确保 `UMinimapWidget` 设置了 `MinimapMaterial`。
+2. 通过 `TextureResolution` 配置小地图分辨率（默认 256x256）。
+3. 单位需带 `UMassVisionTrait` 且 `bShouldBeRepresentedOnMinimap=true`。
+
+### 5.3 常见故障排查
+
+如果出现“有后处理材质但迷雾不更新”，优先检查：
+
+1. 是否有 `AFogOfWar` 且已激活。
+2. 视野单位是否带 `UMassVisionTrait` 且 `SightRadius > 0`。
+3. `GridVolume` 是否覆盖实际战场区域。
+4. 材质参数名是否与插件中使用的参数一致（`FOW_*`）。

@@ -8,6 +8,18 @@
 #include "MassFogOfWarFragments.h"
 #include "DrawDebugHelpers.h"
 
+namespace
+{
+	constexpr int32 DefaultMinimapResolution = 256;
+	constexpr float DefaultVisionTileSize = 100.0f;
+
+	FORCEINLINE void ValidateAndClampResolution(FIntPoint& Resolution)
+	{
+		if (Resolution.X <= 0) Resolution.X = DefaultMinimapResolution;
+		if (Resolution.Y <= 0) Resolution.Y = DefaultMinimapResolution;
+	}
+}
+
 // Define the static singleton instance pointer.
 UMinimapDataSubsystem* UMinimapDataSubsystem::SingletonInstance = nullptr;
 
@@ -43,10 +55,36 @@ void UMinimapDataSubsystem::Deinitialize()
 void UMinimapDataSubsystem::SetMinimapResolution(const FIntPoint& NewResolution)
 {
 	MinimapGridResolution = NewResolution;
+	ValidateAndClampResolution(MinimapGridResolution);
 	MinimapTiles.SetNum(MinimapGridResolution.X * MinimapGridResolution.Y);
 
 	// 如果主网格数据已存在，现在计算小地图瓦片尺寸
 	if (GridSize.X > 0 && GridSize.Y > 0)
+	{
+		MinimapTileSize = FVector2D(GridSize.X / MinimapGridResolution.X, GridSize.Y / MinimapGridResolution.Y);
+	}
+}
+
+void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrigin, const FVector2D& InGridSize, float InVisionTileSize, const FIntPoint& InVisionResolution)
+{
+	GridBottomLeftWorldLocation = InGridOrigin;
+	GridSize = InGridSize;
+	// Fallback to the plugin's historical default tile size (100 cm) to keep behavior
+	// predictable when callers pass an invalid value, while preserving reasonable density.
+	const float SafeVisionTileSize = InVisionTileSize > 0.0f ? InVisionTileSize : DefaultVisionTileSize;
+	VisionTileSize = SafeVisionTileSize;
+
+	VisionGridResolution = InVisionResolution;
+	if (VisionGridResolution.X <= 0)
+	{
+		VisionGridResolution.X = FMath::Max(1, FMath::CeilToInt32(GridSize.X / SafeVisionTileSize));
+	}
+	if (VisionGridResolution.Y <= 0)
+	{
+		VisionGridResolution.Y = FMath::Max(1, FMath::CeilToInt32(GridSize.Y / SafeVisionTileSize));
+	}
+
+	if (MinimapGridResolution.X > 0 && MinimapGridResolution.Y > 0 && GridSize.X > 0 && GridSize.Y > 0)
 	{
 		MinimapTileSize = FVector2D(GridSize.X / MinimapGridResolution.X, GridSize.Y / MinimapGridResolution.Y);
 	}
@@ -59,8 +97,7 @@ void UMinimapDataSubsystem::InitMinimapGrid(const FVector2D& InGridOrigin, const
 	MinimapGridResolution = InResolution;
 	
 	// Ensure Resolution is valid to avoid division by zero
-	if (MinimapGridResolution.X <= 0) MinimapGridResolution.X = 256;
-	if (MinimapGridResolution.Y <= 0) MinimapGridResolution.Y = 256;
+	ValidateAndClampResolution(MinimapGridResolution);
 
 	MinimapTiles.SetNum(MinimapGridResolution.X * MinimapGridResolution.Y);
 

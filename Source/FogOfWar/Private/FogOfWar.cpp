@@ -287,6 +287,11 @@ void AFogOfWar::Initialize()
 		FMath::CeilToInt32(GridSize.X / TileSize),
 		FMath::CeilToInt32(GridSize.Y / TileSize)
 	};
+
+	if (UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get())
+	{
+		MinimapSubsystem->SyncVisionGridParameters(GridBottomLeftWorldLocation, GridSize, TileSize, GridResolution);
+	}
 }
 
 void AFogOfWar::CalculateTileHeight(FTile& Tile, FIntPoint TileIJ)
