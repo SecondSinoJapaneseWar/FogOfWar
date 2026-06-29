@@ -1,10 +1,10 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "MassMinimapProcessors.h"
+#include "FogOfWarMassBinding.h"
 #include "MassFogOfWarFragments.h"
 #include "Subsystems/MinimapDataSubsystem.h"
 #include "MassCommonFragments.h"
-#include "Kismet/GameplayStatics.h"
 
 //----------------------------------------------------------------------//
 //  UMinimapAddProcessor
@@ -19,7 +19,7 @@ UMinimapAddProcessor::UMinimapAddProcessor()
 
 void UMinimapAddProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassMinimapRepresentationFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassPreviousMinimapCellFragment>(EMassFragmentAccess::ReadWrite);
@@ -36,14 +36,14 @@ void UMinimapAddProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 		// }
 		// const FIntPoint MinimapResolution = MinimapDataSubsystem->Minimap_GridResolution;
 		
-		// const TConstArrayView<FTransformFragment> LocationList = Context.GetFragmentView<FTransformFragment>();
+		// const TConstArrayView<FOW_LOCATION_FRAGMENT> LocationList = Context.GetFragmentView<FOW_LOCATION_FRAGMENT>();
 		// const TConstArrayView<FMassMinimapRepresentationFragment> RepList = Context.GetFragmentView<FMassMinimapRepresentationFragment>();
 		// const TConstArrayView<FMassVisionFragment> VisionList = Context.GetFragmentView<FMassVisionFragment>();
 		// const TArrayView<FMassPreviousMinimapCellFragment> PrevCellList = Context.GetMutableFragmentView<FMassPreviousMinimapCellFragment>();
 
 		// for (int32 i = 0; i < Context.GetNumEntities(); ++i)
 		// {
-		// 	const FVector& WorldLocation = LocationList[i].GetTransform().GetLocation();
+		// 	const FVector WorldLocation = FOW_GET_LOCATION(LocationList[i]);
 		// 	const FMassMinimapRepresentationFragment& RepFragment = RepList[i];
 		// 	const FMassVisionFragment& VisionFragment = VisionList[i];
 		// 	FMassPreviousMinimapCellFragment& PrevCellFragment = PrevCellList[i];
@@ -130,7 +130,7 @@ UMinimapUpdateProcessor::UMinimapUpdateProcessor()
 
 void UMinimapUpdateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassMinimapRepresentationFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassPreviousMinimapCellFragment>(EMassFragmentAccess::ReadWrite);
@@ -149,7 +149,7 @@ void UMinimapUpdateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		// }
 		// const FIntPoint MinimapResolution = MinimapDataSubsystem->Minimap_GridResolution;
 
-		// const TConstArrayView<FTransformFragment> LocationList = Context.GetFragmentView<FTransformFragment>();
+		// const TConstArrayView<FOW_LOCATION_FRAGMENT> LocationList = Context.GetFragmentView<FOW_LOCATION_FRAGMENT>();
 		// const TConstArrayView<FMassMinimapRepresentationFragment> RepList = Context.GetFragmentView<FMassMinimapRepresentationFragment>();
 		// const TConstArrayView<FMassVisionFragment> VisionList = Context.GetFragmentView<FMassVisionFragment>();
 		// const TArrayView<FMassPreviousMinimapCellFragment> PrevCellList = Context.GetMutableFragmentView<FMassPreviousMinimapCellFragment>();
@@ -157,7 +157,7 @@ void UMinimapUpdateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		// for (int32 i = 0; i < Context.GetNumEntities(); ++i)
 		// {
 		// 	const FMassEntityHandle Entity = Context.GetEntity(i);
-		// 	const FVector& WorldLocation = LocationList[i].GetTransform().GetLocation();
+		// 	const FVector WorldLocation = FOW_GET_LOCATION(LocationList[i]);
 		// 	FMassPreviousMinimapCellFragment& PrevCellFragment = PrevCellList[i];
 			
 		// 	const FIntPoint PrevCellCoords = PrevCellFragment.PrevCellCoords;

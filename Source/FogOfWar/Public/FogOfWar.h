@@ -26,29 +26,6 @@ class AVolume;
 DECLARE_LOG_CATEGORY_EXTERN(LogFogOfWar, Log, All)
 
 /**
- * @struct FTile
- * @brief 代表战争迷雾网格中的单个瓦片（单元格）。
- * @details 存储了每个网格单元的核心数据。
- */
-USTRUCT()
-struct FOGOFWAR_API FTile
-{
-	GENERATED_BODY()
-
-	/// @brief 瓦片中心点的地形高度（Z轴坐标）。
-	/// @details 在初始化时通过射线检测计算得出，用于后续的视野遮挡判断。
-	UPROPERTY()
-	float Height = 0.0f;
-
-	/// @brief 瓦片的可见性计数器。
-	/// @details 每当有一个视野单位能看到此瓦片时，此计数器加1；当单位移开视野时，减1。
-	/// 只要此值大于0，该瓦片就被认为是当前可见的。这种机制允许多个单位同时观察同一区域。
-	UPROPERTY()
-	int VisibilityCounter = 0;
-};
-
-
-/**
  * @class AFogOfWar
  * @brief 战争迷雾系统的核心管理器Actor。
  * @details 这是一个应在场景中全局唯一的Actor，负责管理整个战争迷雾系统的所有数据和操作。
@@ -185,6 +162,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "FogOfWar|Debug")
 	bool bDebugStressTestIgnoreCache = false;
 
+	/// @brief 【高级】同一迷雾格内移动超过此距离时也强制刷新。0表示只在格子/缓存边界变化时刷新。
+	UPROPERTY(EditAnywhere, Category = "FogOfWar|Performance", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float VisionUpdateWorldDistanceThreshold = 0.0f;
+
 	/// @brief 【调试】压力测试模式，强制每帧更新所有单位的小地图数据。
 	UPROPERTY(EditAnywhere, Category = "FogOfWar|Debug")
 	bool bDebugStressTestMinimap = false;
@@ -292,10 +273,10 @@ public:
 	FORCEINLINE FIntPoint GetTileIJ(int GlobalIndex) const { return { GlobalIndex / GridResolution.Y, GlobalIndex % GridResolution.Y }; }
 
 	/// @brief 根据一维索引获取瓦片对象引用。
-	FORCEINLINE FTile& GetGlobalTile(int GlobalIndex) { return Tiles[GlobalIndex]; }
+	FORCEINLINE FTile& GetGlobalTile(int GlobalIndex) { return UMinimapDataSubsystem::Get()->GetVisionTile(GlobalIndex); }
 
 	/// @brief 根据二维坐标获取瓦片对象引用。
-	FORCEINLINE FTile& GetGlobalTile(FIntPoint IJ) { checkSlow(UMinimapDataSubsystem::IsVisionGridIJValid_Static(IJ)); return GetGlobalTile(GetGlobalIndex(IJ)); }
+	FORCEINLINE FTile& GetGlobalTile(FIntPoint IJ) { return UMinimapDataSubsystem::Get()->GetVisionTile(IJ); }
 
 	/// @brief 检查一个潜在的障碍物高度是否足以阻挡来自观察者的视线。
 	FORCEINLINE bool IsBlockingVision(float ObserverHeight, float PotentialObstacleHeight);
@@ -368,9 +349,6 @@ public:
 	/// @brief PostProcessingMaterial的动态实例。
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PostProcessingMID;
-
-	/// @brief 存储所有瓦片（FTile）的核心数据数组。
-	TArray<FTile> Tiles;
 
 	/// @brief 用于将可见性数据写入纹理的共享缓冲区，避免重复分配内存。
 	TArray<uint8> TextureDataBuffer;

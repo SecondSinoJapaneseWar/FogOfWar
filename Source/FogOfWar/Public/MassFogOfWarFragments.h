@@ -60,6 +60,10 @@ struct FOGOFWAR_API FVisionUnitData
 	UPROPERTY()
 	int CachedOriginGlobalIndex = 0;
 
+	/// @brief 缓存视野计算时的世界坐标，用于后续低成本变更检测。
+	UPROPERTY()
+	FVector CachedOriginWorldLocation = FVector::ZeroVector;
+
 	/// @brief 标记此结构体是否已包含有效的缓存数据。
 	UPROPERTY()
 	bool bHasCachedData = false;
@@ -188,6 +192,40 @@ struct FOGOFWAR_API FMassPreviousVisionFragment : public FMassFragment
 };
 
 /**
+ * Fallback location fragment used only when FogOfWar is compiled without the
+ * MassBattle binding. In this project the default binding reads MassBattle's
+ * FLocating instead.
+ */
+USTRUCT(BlueprintType)
+struct FOGOFWAR_API FFogOfWarLocationFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog of War")
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog of War")
+	FVector PreviousLocation = FVector::ZeroVector;
+};
+
+/**
+ * Fallback team fragment used only when FogOfWar is compiled without the
+ * MassBattle binding. In this project the default binding reads MassBattle's
+ * FTeam instead.
+ */
+USTRUCT(BlueprintType)
+struct FOGOFWAR_API FFogOfWarTeamFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog of War")
+	int32 TeamIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fog of War")
+	int32 PreviousTeamIndex = 0;
+};
+
+/**
  * @struct FMassMinimapRepresentationFragment
  * @brief 存储单位在小地图上的表示信息。
  * @details 包含了在小地图上绘制单位图标所需的颜色、尺寸等数据。
@@ -235,6 +273,12 @@ struct FOGOFWAR_API FMassPreviousMinimapCellFragment : public FMassFragment
 	/// @brief 上一次记录的小地图格子坐标。
 	UPROPERTY()
 	FIntPoint PrevCellCoords = FIntPoint(INT_MIN, INT_MIN);
+};
+
+template<>
+struct TMassFragmentTraits<FMassPreviousVisionFragment>
+{
+	enum { AuthorAcceptsItsNotTriviallyCopyable = true };
 };
 
 

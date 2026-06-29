@@ -5,9 +5,6 @@
 #include "MassProcessor.h"
 #include "MassMinimapProcessors.generated.h"
 
-class AFogOfWar;
-class UMinimapDataSubsystem;
-
 /**
  * @class UMinimapAddProcessor
  * @brief Observes when a minimap representation is added to an entity, incrementing the unit count on the corresponding tile.
@@ -22,8 +19,6 @@ protected:
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 private:
-	TObjectPtr<AFogOfWar> FogOfWarActor;
-	TObjectPtr<UMinimapDataSubsystem> MinimapDataSubsystem;
 	FMassEntityQuery EntityQuery;
 };
 
@@ -43,7 +38,6 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 private:
-	TObjectPtr<UMinimapDataSubsystem> MinimapDataSubsystem;
 	FMassEntityQuery EntityQuery;
 };
 
@@ -62,7 +56,5 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 private:
-	TObjectPtr<AFogOfWar> FogOfWarActor;
-	TObjectPtr<UMinimapDataSubsystem> MinimapDataSubsystem;
 	FMassEntityQuery EntityQuery;
 };

@@ -1,6 +1,7 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "MinimapCellObserver.h"
+#include "FogOfWarMassBinding.h"
 #include "Subsystems/MinimapDataSubsystem.h"
 #include "MassCommonFragments.h"
 #include "MassFogOfWarFragments.h"
@@ -15,27 +16,29 @@ UMinimapCellObserver::UMinimapCellObserver()
 
 void UMinimapCellObserver::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassPreviousMinimapCellFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassMinimapRepresentationFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
+	ProcessorRequirements.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
 }
 
 void UMinimapCellObserver::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	MinimapDataSubsystem = UMinimapDataSubsystem::Get();
-	if (!MinimapDataSubsystem)
+	const UMinimapDataSubsystem* MinimapSubsystem = Context.GetSubsystem<UMinimapDataSubsystem>();
+	if (!MinimapSubsystem || !MinimapSubsystem->IsMinimapGridReady())
 	{
 		return;
 	}
 
 	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
 	{
-		const TConstArrayView<FTransformFragment> LocationList = Context.GetFragmentView<FTransformFragment>();
+		const TConstArrayView<FOW_LOCATION_FRAGMENT> LocationList = Context.GetFragmentView<FOW_LOCATION_FRAGMENT>();
 		const TConstArrayView<FMassPreviousMinimapCellFragment> PrevCellList = Context.GetFragmentView<FMassPreviousMinimapCellFragment>();
 
 		for (int32 i = 0; i < Context.GetNumEntities(); ++i)
 		{
-			const FVector& WorldLocation = LocationList[i].GetTransform().GetLocation();
+			const FVector WorldLocation = FOW_GET_LOCATION(LocationList[i]);
 			const FIntPoint& PrevCellCoords = PrevCellList[i].PrevCellCoords;
 
 			const FIntPoint CurrentMinimapTileIJ = UMinimapDataSubsystem::ConvertWorldLocationToMinimapTileIJ_Static(FVector2D(WorldLocation));

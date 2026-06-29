@@ -26,6 +26,7 @@ public class FogOfWar : ModuleRules
 			new string[]
 			{
 				"Core",
+				"MassCore",
 				"MassEntity", // Moved to Public
 				"MassMovement", // Moved to Public
 				"MassSpawner", // For UMassEntityTraitBase

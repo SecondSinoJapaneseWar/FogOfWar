@@ -1,6 +1,7 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "UI/MinimapWidget.h"
+#include "FogOfWarMassBinding.h"
 #include "Components/Image.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture2D.h"
@@ -93,7 +94,7 @@ bool UMinimapWidget::InitializeMinimapSystem()
 		CountQuery.AddRequirement<FMassMinimapRepresentationFragment>(EMassFragmentAccess::ReadOnly);
 
 		DrawQuery = FMassEntityQuery(EntityManager.AsShared());
-		DrawQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+		DrawQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
 		DrawQuery.AddRequirement<FMassMinimapRepresentationFragment>(EMassFragmentAccess::ReadOnly);
 		DrawQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	}
@@ -189,6 +190,10 @@ void UMinimapWidget::UpdateMinimapTexture()
 		return;
 	}
 
+	MinimapMaterialInstance->SetVectorParameterValue(TEXT("GridBottomLeftWorldLocation"), FLinearColor(MinimapDataSubsystem->GridBottomLeftWorldLocation.X, MinimapDataSubsystem->GridBottomLeftWorldLocation.Y, 0));
+	MinimapMaterialInstance->SetVectorParameterValue(TEXT("GridSize"), FLinearColor(MinimapDataSubsystem->GridSize.X, MinimapDataSubsystem->GridSize.Y, 0));
+	MinimapMaterialInstance->SetVectorParameterValue(TEXT("UnitSize"), FLinearColor(MinimapDataSubsystem->MinimapTileSize.X, MinimapDataSubsystem->MinimapTileSize.Y, 0));
+
 	// Always use the optimized Tile-based Rendering (Path B)
 	// This relies on the Subsystem populating MinimapTiles from the HashGrid each frame.
 	DrawInMassSize();
@@ -227,7 +232,7 @@ void UMinimapWidget::DrawInLessSize()
 	FMassExecutionContext Context = EntityManager.CreateExecutionContext(0.f);
 	DrawQuery.ForEachEntityChunk(Context, [this, &UnitCount, &VisionSourceCount, IconDataPtr, IconColorPtr, VisionDataPtr](FMassExecutionContext& Context)
 	{
-		const TConstArrayView<FTransformFragment> LocationList = Context.GetFragmentView<FTransformFragment>();
+		const TConstArrayView<FOW_LOCATION_FRAGMENT> LocationList = Context.GetFragmentView<FOW_LOCATION_FRAGMENT>();
 		const TConstArrayView<FMassMinimapRepresentationFragment> RepList = Context.GetFragmentView<FMassMinimapRepresentationFragment>();
 		const TConstArrayView<FMassVisionFragment> VisionList = Context.GetFragmentView<FMassVisionFragment>();
 
@@ -235,7 +240,7 @@ void UMinimapWidget::DrawInLessSize()
 		{
 			if (UnitCount >= MaxUnits) break;
 
-			const FVector& WorldLocation = LocationList[i].GetTransform().GetLocation();
+			const FVector WorldLocation = FOW_GET_LOCATION(LocationList[i]);
 			const FMassMinimapRepresentationFragment& RepFragment = RepList[i];
 			const FMassVisionFragment& VisionFragment = VisionList[i];
 

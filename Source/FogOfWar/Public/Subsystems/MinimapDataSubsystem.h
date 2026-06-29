@@ -4,9 +4,25 @@
 
 #include "CoreMinimal.h"
 #include "MassSubsystemBase.h"
+#include "Mass/ExternalSubsystemTraits.h"
 #include "MinimapDataSubsystem.generated.h"
 
-class AFogOfWar;
+/**
+ * 代表战争迷雾高精度网格中的单个瓦片。
+ */
+USTRUCT()
+struct FOGOFWAR_API FTile
+{
+	GENERATED_BODY()
+
+	/** 瓦片中心点的地形高度。初始化阶段由 AFogOfWar 在 GameThread 射线扫描写入。 */
+	UPROPERTY()
+	float Height = 0.0f;
+
+	/** 当前看到此瓦片的视野贡献数量。Mass processors 在运行时维护。 */
+	UPROPERTY()
+	int32 VisibilityCounter = 0;
+};
 
 /**
  * 代表小地图网格上的单个瓦片数据。
@@ -59,6 +75,9 @@ public:
 	/** 由小地图 UI 组件调用以设置其所需的分辨率。 */
 	void SetMinimapResolution(const FIntPoint& NewResolution);
 
+	/** 战争迷雾 Actor 激活时同步运行时选项，Mass 热路径只读这里的纯数据。 */
+	void SyncFogOfWarRuntimeOptions(float InVisionBlockingDeltaHeightThreshold, float InVisionUpdateWorldDistanceThreshold, bool bInDebugStressTestIgnoreCache, bool bInDebugStressTestMinimap);
+
 	/** 
 	 * [Path B] 直接查询 MassBattleHashGrid 以更新小地图瓦片数据。
 	 * 采用三层 LOD 遍历 (Map -> Block -> Cell) 以实现 O(Occupied) 性能。
@@ -66,12 +85,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FogOfWar|Minimap")
 	void UpdateMinimapFromHashGrid(FVector CenterLocation, int32 BlockRadius = 8);
 
+	/** 通过 TeamId 数组索引取得颜色，避免在热路径里散落 team if/switch。 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "FogOfWar|Team")
+	FLinearColor GetTeamColor(int32 TeamIndex) const;
+
 	/**
 	 * 同步战争迷雾高精度网格参数。
 	 * 通常由 AFogOfWar 在初始化后调用，以保证静态坐标转换函数参数有效。
 	 */
 	UFUNCTION(BlueprintCallable, Category = "FogOfWar|Vision")
 	void SyncVisionGridParameters(const FVector2D& InGridOrigin, const FVector2D& InGridSize, float InVisionTileSize, const FIntPoint& InVisionResolution);
+
+	void SetVisionGridActive(bool bInActive);
+	bool IsVisionGridReady() const;
+	bool IsMinimapGridReady() const;
+	bool IsLocationVisible(const FVector& WorldLocation) const;
+	FTile& GetVisionTile(int32 GlobalIndex);
+	const FTile& GetVisionTile(int32 GlobalIndex) const;
+	FTile& GetVisionTile(FIntPoint IJ);
+	const FTile& GetVisionTile(FIntPoint IJ) const;
+	bool IsBlockingVision(float ObserverHeight, float PotentialObstacleHeight) const;
 
 	/**
 	 * 手动初始化小地图网格参数 (通常由 AMinimapVolume 等 Actor 调用)。
@@ -106,6 +139,23 @@ public:
 	// 高精度视野网格的分辨率
 	UPROPERTY(Transient)
 	FIntPoint VisionGridResolution = FIntPoint::ZeroValue;
+
+	UPROPERTY(Transient)
+	bool bVisionGridActive = false;
+
+	UPROPERTY(Transient)
+	float VisionBlockingDeltaHeightThreshold = 200.0f;
+
+	UPROPERTY(Transient)
+	float VisionUpdateWorldDistanceThreshold = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bDebugStressTestIgnoreCache = false;
+
+	UPROPERTY(Transient)
+	bool bDebugStressTestMinimap = false;
+
+	TArray<FTile> VisionTiles;
 	
 	//~ Minimap Grid Properties (Low-Resolution for UI)
 	
@@ -119,6 +169,32 @@ public:
 
 	// 小地图瓦片数据数组
 	TArray<FMinimapTile> MinimapTiles;
+
+	//~ MassBattle auto binding defaults
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category="Minimap|MassBattle")
+	bool bAutoBindMassBattleAgents = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category="Minimap|MassBattle", meta=(ClampMin="0.0", UIMin="0.0"))
+	float DefaultMassBattleSightRadius = 1024.0f;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category="Minimap|MassBattle", meta=(ClampMin="0.0", UIMin="0.0"))
+	float DefaultMassBattleMinimapIconSize = 250.0f;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category="Minimap|Team")
+	FLinearColor DefaultTeamColor = FLinearColor::White;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category="Minimap|Team")
+	TArray<FLinearColor> TeamColors = {
+		FLinearColor(0.45f, 0.45f, 0.45f, 1.0f),
+		FLinearColor(0.10f, 0.72f, 0.18f, 1.0f),
+		FLinearColor(0.85f, 0.12f, 0.10f, 1.0f),
+		FLinearColor(0.12f, 0.34f, 0.95f, 1.0f),
+		FLinearColor(0.95f, 0.72f, 0.10f, 1.0f),
+		FLinearColor(0.10f, 0.80f, 0.90f, 1.0f),
+		FLinearColor(0.75f, 0.20f, 0.85f, 1.0f),
+		FLinearColor(0.95f, 0.45f, 0.12f, 1.0f)
+	};
 	
 public:
 	//~ Begin Static Vision Grid Conversion Functions
@@ -146,6 +222,15 @@ private:
 private:
 	/** 单例实例指针 */
 	static UMinimapDataSubsystem* SingletonInstance;
+};
+
+template<>
+struct TMassExternalSubsystemTraits<UMinimapDataSubsystem> final
+{
+	enum
+	{
+		GameThreadOnly = false
+	};
 };
 
 //~ Begin Inline Implementations of Static Functions

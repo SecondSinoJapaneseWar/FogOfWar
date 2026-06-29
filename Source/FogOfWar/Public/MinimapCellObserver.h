@@ -23,5 +23,4 @@ protected:
 
 private:
 	FMassEntityQuery EntityQuery;
-	class UMinimapDataSubsystem* MinimapDataSubsystem;
 };

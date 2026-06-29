@@ -1,6 +1,7 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "Subsystems/MinimapDataSubsystem.h"
+#include "FogOfWarMassBinding.h"
 #include "MassBattleMinimapRegion.h" // Updated Actor-Driven Region
 #include "Kismet/GameplayStatics.h"
 #include "Subsystems/MassBattleHashGridSubsystem.h"
@@ -65,8 +66,23 @@ void UMinimapDataSubsystem::SetMinimapResolution(const FIntPoint& NewResolution)
 	}
 }
 
+void UMinimapDataSubsystem::SyncFogOfWarRuntimeOptions(float InVisionBlockingDeltaHeightThreshold, float InVisionUpdateWorldDistanceThreshold, bool bInDebugStressTestIgnoreCache, bool bInDebugStressTestMinimap)
+{
+	VisionBlockingDeltaHeightThreshold = InVisionBlockingDeltaHeightThreshold;
+	VisionUpdateWorldDistanceThreshold = InVisionUpdateWorldDistanceThreshold;
+	bDebugStressTestIgnoreCache = bInDebugStressTestIgnoreCache;
+	bDebugStressTestMinimap = bInDebugStressTestMinimap;
+}
+
+FLinearColor UMinimapDataSubsystem::GetTeamColor(int32 TeamIndex) const
+{
+	return TeamColors.IsValidIndex(TeamIndex) ? TeamColors[TeamIndex] : DefaultTeamColor;
+}
+
 void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrigin, const FVector2D& InGridSize, float InVisionTileSize, const FIntPoint& InVisionResolution)
 {
+	bVisionGridActive = false;
+
 	GridBottomLeftWorldLocation = InGridOrigin;
 	GridSize = InGridSize;
 	// Fallback to the plugin's historical default tile size (100 cm) to keep behavior
@@ -88,6 +104,82 @@ void UMinimapDataSubsystem::SyncVisionGridParameters(const FVector2D& InGridOrig
 	{
 		MinimapTileSize = FVector2D(GridSize.X / MinimapGridResolution.X, GridSize.Y / MinimapGridResolution.Y);
 	}
+
+	const int32 NumVisionTiles = VisionGridResolution.X * VisionGridResolution.Y;
+	if (GridSize.X > 0.0f && GridSize.Y > 0.0f && SafeVisionTileSize > 0.0f && NumVisionTiles > 0)
+	{
+		VisionTiles.SetNum(NumVisionTiles);
+		for (FTile& Tile : VisionTiles)
+		{
+			Tile = FTile();
+		}
+	}
+	else
+	{
+		VisionTiles.Reset();
+	}
+}
+
+void UMinimapDataSubsystem::SetVisionGridActive(bool bInActive)
+{
+	bVisionGridActive = bInActive && IsVisionGridReady();
+}
+
+bool UMinimapDataSubsystem::IsVisionGridReady() const
+{
+	return
+		VisionTileSize > 0.0f &&
+		VisionGridResolution.X > 0 &&
+		VisionGridResolution.Y > 0 &&
+		VisionTiles.Num() == VisionGridResolution.X * VisionGridResolution.Y;
+}
+
+bool UMinimapDataSubsystem::IsMinimapGridReady() const
+{
+	return
+		MinimapTileSize.X > 0.0f &&
+		MinimapTileSize.Y > 0.0f &&
+		MinimapGridResolution.X > 0 &&
+		MinimapGridResolution.Y > 0 &&
+		MinimapTiles.Num() == MinimapGridResolution.X * MinimapGridResolution.Y;
+}
+
+bool UMinimapDataSubsystem::IsLocationVisible(const FVector& WorldLocation) const
+{
+	const FIntPoint TileIJ = ConvertWorldLocationToVisionTileIJ_Static(FVector2D(WorldLocation));
+	if (!IsVisionGridIJValid_Static(TileIJ))
+	{
+		return false;
+	}
+
+	return GetVisionTile(TileIJ).VisibilityCounter > 0;
+}
+
+FTile& UMinimapDataSubsystem::GetVisionTile(int32 GlobalIndex)
+{
+	return VisionTiles[GlobalIndex];
+}
+
+const FTile& UMinimapDataSubsystem::GetVisionTile(int32 GlobalIndex) const
+{
+	return VisionTiles[GlobalIndex];
+}
+
+FTile& UMinimapDataSubsystem::GetVisionTile(FIntPoint IJ)
+{
+	checkSlow(IsVisionGridIJValid_Static(IJ));
+	return GetVisionTile(GetVisionGridGlobalIndex_Static(IJ));
+}
+
+const FTile& UMinimapDataSubsystem::GetVisionTile(FIntPoint IJ) const
+{
+	checkSlow(IsVisionGridIJValid_Static(IJ));
+	return GetVisionTile(GetVisionGridGlobalIndex_Static(IJ));
+}
+
+bool UMinimapDataSubsystem::IsBlockingVision(float ObserverHeight, float PotentialObstacleHeight) const
+{
+	return PotentialObstacleHeight - ObserverHeight > VisionBlockingDeltaHeightThreshold;
 }
 
 void UMinimapDataSubsystem::InitMinimapGrid(const FVector2D& InGridOrigin, const FVector2D& InGridSize, const FIntPoint& InResolution)
@@ -206,7 +298,7 @@ void UMinimapDataSubsystem::UpdateMinimapFromHashGrid(FVector CenterLocation, in
 			for (const FAgentGridData& AgentData : Cell.Agents)
 			{
 				TotalAgentsFound++;
-				const FVector AgentWorldPos = CellCenterWorld + FVector(AgentData.RelativeLocation);
+				const FVector AgentWorldPos = CellCenterWorld + AgentData.GetRelativeLocation();
 
 				if (TotalAgentsFound == 1) FirstAgentLoc = AgentWorldPos;
 
@@ -224,19 +316,22 @@ void UMinimapDataSubsystem::UpdateMinimapFromHashGrid(FVector CenterLocation, in
 
 				if (TileX >= 0 && TileX < MapRes.X && TileY >= 0 && TileY < MapRes.Y)
 				{
-					const int32 TileIndex = TileY * MapRes.X + TileX;
-					FMinimapTile& MiniTile = MinimapTiles[TileIndex];
-					MiniTile.UnitCount++;
+					const int32 TileIndex = TileX * MapRes.Y + TileY;
 
 					FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 					// HashGrid 不与 Mass Entity 生命周期同步，Entity 可能已被销毁
 					// 必须在访问任何 Fragment 前检查，否则触发 IsEntityValid 断言崩溃
 					if (!EntityManager.IsEntityValid(AgentData.EntityHandle)) continue;
+
+					FMinimapTile& MiniTile = MinimapTiles[TileIndex];
+					MiniTile.UnitCount++;
 					
-					// Fallback Defaults
-					FLinearColor IconColor = FLinearColor::White;
-					float IconSize = 250.0f; // Visible default size
+					// Fallback defaults come from MassBattle data, so plain Battle agents
+					// remain visible even before a custom minimap representation is added.
+					const FOW_TEAM_FRAGMENT* TeamFrag = EntityManager.GetFragmentDataPtr<FOW_TEAM_FRAGMENT>(AgentData.EntityHandle);
+					FLinearColor IconColor = TeamFrag ? GetTeamColor(FOW_GET_TEAM_INDEX(*TeamFrag)) : DefaultTeamColor;
+					float IconSize = DefaultMassBattleMinimapIconSize;
 
 					if (const FMassMinimapRepresentationFragment* RepFrag = EntityManager.GetFragmentDataPtr<FMassMinimapRepresentationFragment>(AgentData.EntityHandle))
 					{

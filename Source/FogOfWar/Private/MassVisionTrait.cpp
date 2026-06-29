@@ -1,11 +1,17 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "MassVisionTrait.h"
+#include "FogOfWarMassBinding.h"
 #include "MassEntityTemplateRegistry.h"
 #include "MassRepresentationFragments.h" // For FMassRepresentationFragment
 
 void UMassVisionTrait::BuildTemplate(FMassEntityTemplateBuildContext& BuildContext, const UWorld& World) const
 {
+#if !FOW_USE_MASSBATTLE_BINDING
+	BuildContext.AddFragment_GetRef<FFogOfWarLocationFragment>();
+	BuildContext.AddFragment_GetRef<FFogOfWarTeamFragment>();
+#endif
+
 	BuildContext.AddFragment_GetRef<FMassPreviousVisionFragment>();
 
 	// 根据配置添加视野相关的Fragment和Tag

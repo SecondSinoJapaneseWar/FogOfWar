@@ -1,31 +1,31 @@
 // Copyright Winyunq, 2025. All Rights Reserved.
 
 #include "MassFogOfWarProcessors.h"
+#include "FogOfWarMassBinding.h"
 #include "MassFogOfWarFragments.h"
 #include "MassCommonFragments.h"
-#include "FogOfWar.h"
 #include "Subsystems/MinimapDataSubsystem.h"
 #include "MassExecutionContext.h"
-#include "Kismet/GameplayStatics.h"
+#include "MassCommands.h"
 #include "Containers/StringView.h"
 #include "MassRepresentationProcessor.h" // 包含 UMassVisibilityProcessor 的定义
 #include "MassRepresentationFragments.h" // 包含 FMassVisibilityFragment 的定义
+#include "Fragments/PrimaryType.h"
 
 //----------------------------------------------------------------------//
 // FFogOfWarMassHelpers
 //----------------------------------------------------------------------//
-void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AFogOfWar* FogOfWar)
+void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, UMinimapDataSubsystem& MinimapSubsystem)
 {
-	// Subsystem is now accessed via its static Get() method.
-	const float VisionTileSize = UMinimapDataSubsystem::Get()->VisionTileSize;
+	const float VisionTileSize = MinimapSubsystem.VisionTileSize;
 	
-	const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
+	const TConstArrayView<FOW_LOCATION_FRAGMENT> LocationList = Context.GetFragmentView<FOW_LOCATION_FRAGMENT>();
 	const TConstArrayView<FMassVisionFragment> VisionList = Context.GetFragmentView<FMassVisionFragment>();
 	const TArrayView<FMassPreviousVisionFragment> PreviousVisionList = Context.GetMutableFragmentView<FMassPreviousVisionFragment>();
 
 	for (int32 EntityIndex = 0; EntityIndex < Context.GetNumEntities(); ++EntityIndex)
 	{
-		const FVector& Location = TransformList[EntityIndex].GetTransform().GetLocation();
+		const FVector Location = FOW_GET_LOCATION(LocationList[EntityIndex]);
 		const float SightRadius = VisionList[EntityIndex].SightRadius;
 		FMassPreviousVisionFragment& PreviousVisionFragment = PreviousVisionList[EntityIndex];
 
@@ -41,7 +41,7 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 						const FIntPoint GlobalIJ = PreviousVisionFragment.PreviousVisionData.LocalToGlobal({ I, J });
 						if (UMinimapDataSubsystem::IsVisionGridIJValid_Static(GlobalIJ))
 						{
-							FTile& GlobalTile = FogOfWar->GetGlobalTile(GlobalIJ);
+							FTile& GlobalTile = MinimapSubsystem.GetVisionTile(GlobalIJ);
 							checkSlow(GlobalTile.VisibilityCounter > 0);
 							GlobalTile.VisibilityCounter--;
 						}
@@ -49,6 +49,12 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 				}
 			}
 			PreviousVisionFragment.PreviousVisionData.bHasCachedData = false;
+		}
+
+		if (SightRadius <= 0.0f)
+		{
+			PreviousVisionFragment.PreviousVisionData = FVisionUnitData();
+			continue;
 		}
 
 		// Create current VisionUnitData
@@ -60,6 +66,7 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 			.LocalAreaTilesResolution = LocalAreaTilesResolution,
 			.GridSpaceRadius = SightRadius / VisionTileSize,
 			.LocalAreaTilesCachedStates = MoveTemp(LocalAreaTilesStates),
+			.CachedOriginWorldLocation = Location,
 		};
 
 		const FVector2f OriginGridLocation = UMinimapDataSubsystem::ConvertWorldSpaceLocationToVisionGridSpace_Static(FVector2D(Location));
@@ -76,7 +83,7 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 		
 		if (!UMinimapDataSubsystem::IsVisionGridIJValid_Static(OriginGlobalIJ))
 		{
-			UE_LOG(LogFogOfWar, Verbose, TEXT("Vision actor is outside the grid. Skipping."));
+			UE_LOG(LogTemp, Verbose, TEXT("Vision entity is outside the FogOfWar grid. Skipping."));
 			PreviousVisionFragment.PreviousVisionData = MoveTemp(VisionUnitData);
 			continue; // Use continue to skip this entity and proceed with the next in the chunk
 		}
@@ -158,8 +165,8 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 									CurrentDDALocalIndexesStack.Push(CurrentDDALocalIndex);
 									if (CurrentDDALocalIJ == OriginLocalIJ) break;
 
-									auto CurrentHeight = FogOfWar->GetGlobalTile(VisionUnitData.LocalToGlobal(CurrentDDALocalIJ)).Height;
-									if (FogOfWar->IsBlockingVision(Location.Z, CurrentHeight))
+									const float CurrentHeight = MinimapSubsystem.GetVisionTile(VisionUnitData.LocalToGlobal(CurrentDDALocalIJ)).Height;
+									if (MinimapSubsystem.IsBlockingVision(Location.Z, CurrentHeight))
 									{
 										bIsBlocking = true;
 										break;
@@ -235,7 +242,7 @@ void FFogOfWarMassHelpers::ProcessEntityChunk(FMassExecutionContext& Context, AF
 					{
 						if (VisionUnitData.GetLocalTileState({ I, J }) == ETileState::Visible)
 						{
-							FTile& GlobalTile = FogOfWar->GetGlobalTile(GlobalIJ);
+							FTile& GlobalTile = MinimapSubsystem.GetVisionTile(GlobalIJ);
 							GlobalTile.VisibilityCounter++;
 						}
 					}
@@ -260,31 +267,115 @@ UInitialVisionProcessor::UInitialVisionProcessor()
 
 void UInitialVisionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassPreviousVisionFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddTagRequirement<FMassVisionEntityTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassVisionInitializedTag>(EMassFragmentPresence::None); // Run only on uninitialized entities
+	EntityQuery.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadWrite);
+	ProcessorRequirements.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadWrite);
 }
 
 void UInitialVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	/*if (!FogOfWarActor.Get())
-	{
-		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
-	}
-	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !UMinimapDataSubsystem::Get() || !UMinimapDataSubsystem::Get()->bIsInitialized)
+	UMinimapDataSubsystem* MinimapSubsystem = Context.GetMutableSubsystem<UMinimapDataSubsystem>();
+	if (!MinimapSubsystem || !MinimapSubsystem->bVisionGridActive || !MinimapSubsystem->IsVisionGridReady())
 	{
 		return;
 	}
 
-	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(Context, [MinimapSubsystem](FMassExecutionContext& Context)
 	{
+		FFogOfWarMassHelpers::ProcessEntityChunk(Context, *MinimapSubsystem);
+
 		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
 		for (const FMassEntityHandle& Entity : Entities)
 		{
 			Context.Defer().AddTag<FMassVisionInitializedTag>(Entity);
 		}
-	});*/
+	});
+}
+
+
+//----------------------------------------------------------------------
+//  UMassBattleFogOfWarBootstrapProcessor
+//----------------------------------------------------------------------
+UMassBattleFogOfWarBootstrapProcessor::UMassBattleFogOfWarBootstrapProcessor()
+	: EntityQuery(*this)
+{
+	bAutoRegisterWithProcessingPhases = true;
+	ExecutionFlags = (int32)EProcessorExecutionFlags::All;
+	ExecutionOrder.ExecuteBefore.Add(UInitialVisionProcessor::StaticClass()->GetFName());
+}
+
+void UMassBattleFogOfWarBootstrapProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
+{
+	EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FOW_TEAM_FRAGMENT>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FAgentTag>(EMassFragmentPresence::All);
+	EntityQuery.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
+	ProcessorRequirements.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
+}
+
+void UMassBattleFogOfWarBootstrapProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+	const UMinimapDataSubsystem* MinimapSubsystem = Context.GetSubsystem<UMinimapDataSubsystem>();
+	if (!MinimapSubsystem || !MinimapSubsystem->bAutoBindMassBattleAgents)
+	{
+		return;
+	}
+
+	const float DefaultSightRadius = MinimapSubsystem->DefaultMassBattleSightRadius;
+	const float DefaultIconSize = MinimapSubsystem->DefaultMassBattleMinimapIconSize;
+
+	EntityQuery.ForEachEntityChunk(Context, [MinimapSubsystem, DefaultSightRadius, DefaultIconSize](FMassExecutionContext& Context)
+	{
+		const TConstArrayView<FOW_TEAM_FRAGMENT> TeamList = Context.GetFragmentView<FOW_TEAM_FRAGMENT>();
+		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
+
+		const bool bHasPreviousVision = Context.DoesArchetypeHaveFragment<FMassPreviousVisionFragment>();
+		const bool bHasMinimapRepresentation = Context.DoesArchetypeHaveFragment<FMassMinimapRepresentationFragment>();
+		const bool bHasPreviousMinimapCell = Context.DoesArchetypeHaveFragment<FMassPreviousMinimapCellFragment>();
+		const bool bHasVisionEntityTag = Context.DoesArchetypeHaveTag<FMassVisionEntityTag>();
+		const bool bHasVisibleEntityTag = Context.DoesArchetypeHaveTag<FMassVisibleEntityTag>();
+
+		for (int32 EntityIndex = 0; EntityIndex < Context.GetNumEntities(); ++EntityIndex)
+		{
+			const FMassEntityHandle Entity = Entities[EntityIndex];
+
+			FMassVisionFragment VisionFragment;
+			VisionFragment.SightRadius = DefaultSightRadius;
+			Context.Defer().PushCommand<FMassCommandAddFragmentInstances>(Entity, VisionFragment);
+
+			if (!bHasPreviousVision)
+			{
+				Context.Defer().PushCommand<FMassCommandAddFragmentInstances>(Entity, FMassPreviousVisionFragment());
+			}
+
+			if (!bHasMinimapRepresentation)
+			{
+				FMassMinimapRepresentationFragment RepresentationFragment;
+				RepresentationFragment.IconColor = MinimapSubsystem->GetTeamColor(FOW_GET_TEAM_INDEX(TeamList[EntityIndex]));
+				RepresentationFragment.IconSize = DefaultIconSize;
+				Context.Defer().PushCommand<FMassCommandAddFragmentInstances>(Entity, RepresentationFragment);
+			}
+
+			if (!bHasPreviousMinimapCell)
+			{
+				Context.Defer().PushCommand<FMassCommandAddFragmentInstances>(Entity, FMassPreviousMinimapCellFragment());
+			}
+
+			if (!bHasVisionEntityTag)
+			{
+				Context.Defer().AddTag<FMassVisionEntityTag>(Entity);
+			}
+			if (!bHasVisibleEntityTag)
+			{
+				Context.Defer().AddTag<FMassVisibleEntityTag>(Entity);
+			}
+		}
+	});
 }
 
 
@@ -302,39 +393,26 @@ UVisionProcessor::UVisionProcessor()
 
 void UVisionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FOW_LOCATION_FRAGMENT>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassPreviousVisionFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddTagRequirement<FMassVisionEntityTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassLocationChangedTag>(EMassFragmentPresence::All); // Only process entities that have moved
-
-	// --- 核心修复 ---
-	// 只处理未被剔除的实体.
-	// 即：实体不能有“被距离剔除”的Tag，也不能有“被视锥体剔除”的Tag。
-	EntityQuery.AddTagRequirement<FMassVisibilityCulledByDistanceTag>(EMassFragmentPresence::None);
-	EntityQuery.AddTagRequirement<FMassVisibilityCulledByFrustumTag>(EMassFragmentPresence::None);
+	EntityQuery.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadWrite);
+	ProcessorRequirements.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadWrite);
 }
 
 void UVisionProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	if (!FogOfWarActor.Get())
-	{
-		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
-	}
-
-	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
-	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated() || !MinimapSubsystem)
+	UMinimapDataSubsystem* MinimapSubsystem = Context.GetMutableSubsystem<UMinimapDataSubsystem>();
+	if (!MinimapSubsystem || !MinimapSubsystem->bVisionGridActive || !MinimapSubsystem->IsVisionGridReady())
 	{
 		return;
 	}
 
-	if (MinimapSubsystem->VisionTileSize <= 0.0f || MinimapSubsystem->VisionGridResolution.X <= 0 || MinimapSubsystem->VisionGridResolution.Y <= 0)
+	EntityQuery.ForEachEntityChunk(Context, [MinimapSubsystem](FMassExecutionContext& Context)
 	{
-		return;
-	}
-
-	EntityQuery.ForEachEntityChunk(Context, [this](FMassExecutionContext& Context)
-	{
-		FFogOfWarMassHelpers::ProcessEntityChunk(Context, FogOfWarActor.Get());
+		FFogOfWarMassHelpers::ProcessEntityChunk(Context, *MinimapSubsystem);
 
 		const TArrayView<const FMassEntityHandle> Entities = Context.GetEntities();
 		for (const FMassEntityHandle& Entity : Entities)
@@ -360,21 +438,20 @@ void UDebugStressTestProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
 {
 	EntityQuery.AddRequirement<FMassVisionFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FMassVisionEntityTag>(EMassFragmentPresence::All);
+	EntityQuery.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
+	ProcessorRequirements.AddSubsystemRequirement<UMinimapDataSubsystem>(EMassFragmentAccess::ReadOnly);
 }
 
 void UDebugStressTestProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	/*if (!FogOfWarActor.Get())
-	{
-		FogOfWarActor = Cast<AFogOfWar>(UGameplayStatics::GetActorOfClass(GetWorld(), AFogOfWar::StaticClass()));
-	}
-	if (!FogOfWarActor.Get() || !FogOfWarActor->IsActivated())
+	const UMinimapDataSubsystem* MinimapSubsystem = Context.GetSubsystem<UMinimapDataSubsystem>();
+	if (!MinimapSubsystem || !MinimapSubsystem->bVisionGridActive)
 	{
 		return;
 	}
 
-	const bool bForceVisionUpdate = FogOfWarActor->bDebugStressTestIgnoreCache;
-	const bool bForceMinimapUpdate = FogOfWarActor->bDebugStressTestMinimap;
+	const bool bForceVisionUpdate = MinimapSubsystem->bDebugStressTestIgnoreCache;
+	const bool bForceMinimapUpdate = MinimapSubsystem->bDebugStressTestMinimap;
 
 	if (!bForceVisionUpdate && !bForceMinimapUpdate)
 	{
@@ -395,5 +472,5 @@ void UDebugStressTestProcessor::Execute(FMassEntityManager& EntityManager, FMass
 				Context.Defer().AddTag<FMinimapCellChangedTag>(Entity);
 			}
 		}
-	});*/
+	});
 }

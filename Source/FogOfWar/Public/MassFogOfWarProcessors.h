@@ -8,7 +8,7 @@
 
 #include "MassFogOfWarProcessors.generated.h"
 
-class AFogOfWar;
+class UMinimapDataSubsystem;
 
 /**
  * @file MassFogOfWarProcessors.h
@@ -19,20 +19,20 @@ class AFogOfWar;
 /**
  * @struct FFogOfWarMassHelpers
  * @brief 包含战争迷雾处理器共享的静态辅助函数。
- * @details 目的是将通用逻辑（如遍历实体块并调用AFogOfWar进行计算）提取出来，避免在多个Processor中重复代码。
+ * @details 目的是将通用逻辑（如遍历实体块并更新迷雾数据）提取出来，避免在多个Processor中重复代码。
  */
 struct FOGOFWAR_API FFogOfWarMassHelpers
 {
 	/**
 	 * @brief       处理单个实体块（Entity Chunk）中的所有实体。
-	 * @details     遍历给定执行上下文（Context）中的所有实体，并为每个实体调用AFogOfWar主控Actor的视野更新函数。
+	 * @details     遍历给定执行上下文（Context）中的所有实体，并更新 Subsystem 中的可见性网格。
 	 *
 	 * @param       Context                        数据类型: FMassExecutionContext&
 	 * @details     Mass执行上下文，包含了当前正在处理的实体块信息。
-	 * @param       FogOfWar                       数据类型: AFogOfWar*
-	 * @details     指向场景中唯一的AFogOfWar主控Actor的指针。
+	 * @param       MinimapSubsystem               数据类型: UMinimapDataSubsystem&
+	 * @details     Mass 安全访问声明过的迷雾/小地图数据 Subsystem。
 	 */
-	static void ProcessEntityChunk(FMassExecutionContext& Context, AFogOfWar* FogOfWar);
+	static void ProcessEntityChunk(FMassExecutionContext& Context, UMinimapDataSubsystem& MinimapSubsystem);
 };
 
 /**
@@ -65,10 +65,30 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 private:
-	/// @brief 指向场景中AFogOfWar主控Actor的指针，在Initialize时被缓存。
-	TObjectPtr<AFogOfWar> FogOfWarActor;
-
 	/// @brief 处理器使用的实体查询对象，在ConfigureQueries时被定义。
+	FMassEntityQuery EntityQuery;
+};
+
+/**
+ * Automatically attaches FogOfWar fragments to normal MassBattle agents.
+ *
+ * MassBattle agent templates are created by MassBattle's own subsystem, so they
+ * do not pass through UMassVisionTrait. This processor bridges that gap once per
+ * entity, using FogOfWar config defaults when no explicit FogOfWar data exists.
+ */
+UCLASS()
+class FOGOFWAR_API UMassBattleFogOfWarBootstrapProcessor : public UMassProcessor
+{
+	GENERATED_BODY()
+
+public:
+	UMassBattleFogOfWarBootstrapProcessor();
+
+protected:
+	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
+
+private:
 	FMassEntityQuery EntityQuery;
 };
 
@@ -102,9 +122,6 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 private:
-	/// @brief 指向场景中AFogOfWar主控Actor的指针，在Initialize时被缓存。
-	TObjectPtr<AFogOfWar> FogOfWarActor;
-
 	/// @brief 处理器使用的实体查询对象，在ConfigureQueries时被定义。
 	FMassEntityQuery EntityQuery;
 };
@@ -128,7 +145,6 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 
 private:
-	TObjectPtr<AFogOfWar> FogOfWarActor;
 	FMassEntityQuery EntityQuery;
 };
 

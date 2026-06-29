@@ -40,15 +40,8 @@ AFogOfWar::AFogOfWar()
 
 bool AFogOfWar::IsLocationVisible(FVector WorldLocation)
 {
-	FIntPoint TileIJ = UMinimapDataSubsystem::ConvertWorldLocationToVisionTileIJ_Static(FVector2D(WorldLocation));
-	if (!UMinimapDataSubsystem::IsVisionGridIJValid_Static(TileIJ))
-	{
-		return false;
-	}
-
-	const FTile& Tile = GetGlobalTile(TileIJ);
-	bool bIsVisible = Tile.VisibilityCounter > 0;
-	return bIsVisible;
+	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	return MinimapSubsystem && MinimapSubsystem->bVisionGridActive && MinimapSubsystem->IsVisionGridReady() && MinimapSubsystem->IsLocationVisible(WorldLocation);
 }
 
 UTexture* AFogOfWar::GetFinalVisibilityTexture()
@@ -79,18 +72,28 @@ void AFogOfWar::Activate()
 
 	checkf(GridResolution.X + GridResolution.Y <= 10000, TEXT("Grid resolution is too big (possible int32 overflow when calculating square distance)"));
 
+	UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	check(MinimapSubsystem);
+	MinimapSubsystem->SyncFogOfWarRuntimeOptions(
+		VisionBlockingDeltaHeightThreshold,
+		VisionUpdateWorldDistanceThreshold,
+		bDebugStressTestIgnoreCache,
+		bDebugStressTestMinimap);
+
 	const int GridTilesNum = GridResolution.X * GridResolution.Y;
-	Tiles.SetNum(GridTilesNum);
 	TextureDataBuffer.SetNum(GridTilesNum);
+	check(MinimapSubsystem->VisionTiles.Num() == GridTilesNum);
 
 	for (int I = 0; I < GridResolution.X; I++)
 	{
 		for (int J = 0; J < GridResolution.Y; J++)
 		{
-			FTile& Tile = GetGlobalTile({ I, J });
+			FTile& Tile = MinimapSubsystem->GetVisionTile({ I, J });
 			CalculateTileHeight(Tile, { I,J });
 		}
 	}
+
+	MinimapSubsystem->SetVisionGridActive(true);
 
 #if WITH_EDITORONLY_DATA
 	HeightmapTexture = CreateSnapshotTexture();
@@ -231,6 +234,14 @@ void AFogOfWar::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	// The vision update loop is now handled by Mass processors.
+	if (UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get())
+	{
+		MinimapSubsystem->SyncFogOfWarRuntimeOptions(
+			VisionBlockingDeltaHeightThreshold,
+			VisionUpdateWorldDistanceThreshold,
+			bDebugStressTestIgnoreCache,
+			bDebugStressTestMinimap);
+	}
 
 	{
 		DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Pipeline"), STAT_FogOfWarPipeline, STATGROUP_FogOfWar);
@@ -347,9 +358,20 @@ UTextureRenderTarget2D* AFogOfWar::CreateRenderTarget()
 
 void AFogOfWar::WriteVisionDataToTexture(UTexture2D* Texture)
 {
-	for (int TileIndex = 0; TileIndex < Tiles.Num(); TileIndex++)
+	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	if (!MinimapSubsystem || !MinimapSubsystem->IsVisionGridReady())
 	{
-		const FTile& Tile = Tiles[TileIndex];
+		return;
+	}
+
+	if (TextureDataBuffer.Num() != MinimapSubsystem->VisionTiles.Num())
+	{
+		TextureDataBuffer.SetNum(MinimapSubsystem->VisionTiles.Num());
+	}
+
+	for (int TileIndex = 0; TileIndex < MinimapSubsystem->VisionTiles.Num(); TileIndex++)
+	{
+		const FTile& Tile = MinimapSubsystem->VisionTiles[TileIndex];
 		TextureDataBuffer[TileIndex] = Tile.VisibilityCounter > 0 ? 0xFF : 0;
 	}
 
@@ -363,12 +385,18 @@ void AFogOfWar::WriteVisionDataToTexture(UTexture2D* Texture)
 #if WITH_EDITORONLY_DATA
 void AFogOfWar::WriteHeightmapDataToTexture(UTexture2D* Texture)
 {
-	TArray<uint8> HeightmapDataBuffer;
-	HeightmapDataBuffer.SetNum(Tiles.Num());
-
-	for (int TileIndex = 0; TileIndex < Tiles.Num(); TileIndex++)
+	const UMinimapDataSubsystem* MinimapSubsystem = UMinimapDataSubsystem::Get();
+	if (!MinimapSubsystem || !MinimapSubsystem->IsVisionGridReady())
 	{
-		const FTile& Tile = Tiles[TileIndex];
+		return;
+	}
+
+	TArray<uint8> HeightmapDataBuffer;
+	HeightmapDataBuffer.SetNum(MinimapSubsystem->VisionTiles.Num());
+
+	for (int TileIndex = 0; TileIndex < MinimapSubsystem->VisionTiles.Num(); TileIndex++)
+	{
+		const FTile& Tile = MinimapSubsystem->VisionTiles[TileIndex];
 		HeightmapDataBuffer[TileIndex] = FMath::RoundToInt(FMath::Clamp(FMath::GetRangePct(DebugHeightmapLowestZ, DebugHeightmapHightestZ, Tile.Height), 0.0f, 1.0f) * 0xFF);
 	}
 

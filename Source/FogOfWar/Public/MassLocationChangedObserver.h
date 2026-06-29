@@ -6,8 +6,10 @@
 #include "MassLocationChangedObserver.generated.h"
 
 /**
- * Observes changes in the FTransformFragment and adds a FMassLocationChangedTag to the entity.
- * This triggers the UVisionProcessor to recalculate vision for the moved entity.
+ * Observes FogOfWar's bound location fragment and adds FMassLocationChangedTag
+ * only when the current vision cache is missing or no longer matches the
+ * current fog-grid position. Debug force-update can still mark every vision
+ * provider each frame.
  */
 UCLASS()
 class FOGOFWAR_API UMassLocationChangedObserver : public UMassProcessor
